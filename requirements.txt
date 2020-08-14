@@ -1,0 +1,8 @@
+click==7.1.2
+flake8==3.8.3
+-e git+https://github.com/jeffkaufman/icdiff.git#egg=icdiff
+loguru==0.5.1
+ostruct==4.0.0
+pydantic==1.6.1
+pytest==6.0.1
+pytest-cov==2.10.0

@@ -1,0 +1,15 @@
+Host defined_before_block
+     Port 1234
+
+Host test-a.us-central1-b.project-name-1
+    HostName 34.1.11.111
+
+Host test-b.europe-west4-b.project-name-2
+    HostName 34.2.22.222
+    IdentityFile /home/zor/.ssh/google_compute_engine
+    UserKnownHostsFile=/home/zor/.ssh/google_compute_known_hosts
+    HostKeyAlias=compute.000000000000000000
+    IdentitiesOnly=yes
+    CheckHostIP=no
+
+# End of Google Compute Engine Section

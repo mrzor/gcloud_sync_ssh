@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+
+from contextlib import contextmanager
+
+import click
+from loguru import logger
+
+from .gcloud_auth import GCloudServiceAccountAuth, GCloudAccountIdAuth
+from .gcloud_config import gcloud_config_get
+from .gcloud_instances import build_host_dict
+from .gcloud_projects import fetch_projects_data
+from .host_config import HostConfig
+from .util.globbing import has_pattern, matches_any
+from .ssh_config import SSHConfig, SSHConfigParseError
+
+
+@contextmanager
+def nullcontext():
+    yield
+
+
+def _sync_instances(project_id, instance_globs, ssh_config, host_template, no_removal):
+    data = build_host_dict(project_id, instance_globs)
+    for host, hd in data.items():
+        # See https://cloud.google.com/compute/docs/instances/instance-life-cycle
+        # for status state machine
+
+        # We ignore transitional states and suspension-related cases
+        if hd['status'] == 'RUNNING':
+            ssh_config.update_host(host, ip=hd['ip'], id=hd['id'], template=host_template)
+
+        if hd['status'] == 'TERMINATED':
+            if not no_removal:
+                ssh_config.remove_host(host)
+
+
+def _prepare_auth_context(login=None, service_account=None):
+    ctx = nullcontext()
+    if login:
+        if service_account:
+            logger.error("--login and --service-account cannot be used simultaneously")
+            exit(1)
+        ctx = GCloudAccountIdAuth(login)
+    elif service_account:
+        ctx = GCloudServiceAccountAuth(service_account)
+    return ctx
+
+
+def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[]):
+    """Prepares our template HostConfig for hosts we are going to discover"""
+    # XXX: hosts we need to update don't use the template at all, but could, to batch edit)
+
+    # 1) Start with defaults
+    if no_host_defaults:
+        kwargs = {}
+    else:
+        kwargs = HostConfig.default_config().minidict()
+
+    # 2) Override default with inferred kwargs
+    kwargs.update(inferred_kwargs)
+
+    # 3) Finally override with kwargs from the commandline
+    # XXX doesn't support lists yet
+    for kwarg in cli_kwargs:
+        eq_idx = kwarg.index("=")
+        if eq_idx == -1:
+            logger.error(f"Invalid KWArg '#{kwarg}' - must be Keyword=Argument")
+            exit(1)
+        k = kwarg[:eq_idx]
+        v = kwarg[eq_idx+1:]
+        if v:
+            kwargs[k] = v
+        else:
+            kwargs.pop(k, None)
+
+    return HostConfig(**kwargs)
+
+
+@click.command()
+@click.argument("INSTANCE_GLOBS", nargs=-1, type=str, required=False)
+@click.option("-l", "--login", type=str,
+              help="Perform gcloud auth to a specific account before running")
+@click.option("-s", "--service-account", type=str, metavar="AUTH_PATH",
+              help="Perform gcloud auth to a specific service account before running")
+@click.option("-P", "--all-projects", is_flag=True,
+              help="Synchronize instances in all reachable projects")
+@click.option("-p", "--project", type=str, multiple=True, metavar="PROJECT_NAME",
+              help="Synchronize instances in a specific project")
+@click.option("-c", "--ssh-config", type=str,
+              help="Path the SSH config file", metavar="CONFIG_PATH",
+              default="~/.ssh/config")
+@click.option("-ni", "--not-interactive", is_flag=True, default=False,
+              help="Don't show diff and don't ask approval before writing updated config file.")
+@click.option("-kw", "--kwarg", type=str, multiple=True,
+              metavar="KW=[ARG]",
+              help="""(for all hosts) Set specific SSH Keyword-Argument (kwarg) pairs
+
+Ex: "-kw StrictHostKeyChecking=ask" to set
+
+Ex: "-kw StrictHostKeyChecking=" to remove the field
+""")
+@click.option("-nk", "--no-host-key-alias", is_flag=True, default=False,
+              help="(for all hosts) Don't generate a HostKeyAlias entry based on instance id")
+@click.option("--no-inference", is_flag=True, default=False,
+              help="(for new hosts) Don't infer kwargs from existing Hosts")
+@click.option("-nd", "--no-host-defaults", is_flag=True, default=False,
+              help="(for new hosts) Don't use baked in kwargs defaults")
+@click.option("-nr", "--no-removal", is_flag=True, default=False,
+              help="(for existing, stopped hosts) Don't remove STOPPED instances from config.")
+@click.option("--no-backup", is_flag=True, default=False,
+              help="Don't save SSH configuration backup.")
+def cli(instance_globs,
+        login, service_account,
+        all_projects, project,
+        ssh_config, kwarg,
+        not_interactive,
+        no_inference, no_backup, no_host_defaults, no_removal, no_host_key_alias):
+    """An improved version of `gcloud compute config-ssh`.
+       See https://github.com/mrzor/gcloud_sync_ssh/blob/master/README.md for more info."""
+
+    if project and all_projects:
+        logger.error("--project and --all-projects cannot be used simultaneously")
+        exit(1)
+
+    # Load config (exit before any IPC if it's wrong)
+    try:
+        _ssh_config = SSHConfig(ssh_config)
+    except SSHConfigParseError as e:
+        logger.error(f"SSH Config parse error: #{e.message}")
+        exit(1)
+
+    inferred_kwargs = _ssh_config.infer_host_config().minidict() if not no_inference else {}
+    host_template = _build_host_template(inferred_kwargs=inferred_kwargs,
+                                         no_host_defaults=no_host_defaults,
+                                         cli_kwargs=kwarg)
+
+    ctx = _prepare_auth_context(login=login, service_account=service_account)
+
+    # Try to obtain active project name if no projects are specified in options
+    if not all_projects and not project:
+        project = [gcloud_config_get("core/project")]
+        if not project:
+            logger.error("could not determine an active project")
+            exit(1)
+
+    # Prepare project list
+    project_list = None
+    if not all_projects and not has_pattern(project):
+        # One or more simple --project options were passed, use "as is"
+        project_list = project
+
+    if all_projects or has_pattern(project):
+        # Either we want all projects, or we have some patterns to match against all projects
+        logger.info("Enumerating reachable GCP projects")
+        if has_pattern(project):
+            project_list = [datum["projectId"] for datum in fetch_projects_data()
+                            if matches_any(datum["projectId"], project)]
+        else:
+            project_list = [datum["projectId"] for datum in fetch_projects_data()]
+
+    # Do what we're here to do
+    logger.info(f"Beginning instance enumeration in {len(project_list)} projects")
+    with ctx:  # Restoring our gcloud auth when we're done
+        for project in project_list:
+            logger.info(f"Enumerating instances in project {project}")
+            _sync_instances(project, instance_globs, _ssh_config, host_template, no_removal)
+
+    # Check what's new
+    diff = _ssh_config.diff()
+    if not diff:
+        logger.info("No changes to SSH config")
+        return
+
+    # Display diff and ask for confirmation
+    if not not_interactive:
+        logger.info("Displaying proposed changes as a diff before applying")
+        for line in diff:
+            click.echo(line)
+
+        confirmed = None
+        try:
+            confirmed = click.confirm("Save changes?", default=False)
+        except click.Abort:
+            confirmed = False
+
+        if not confirmed:
+            logger.info("User did not confirm changes. Exiting.")
+            exit(0)
+
+    # Backup config file
+    if not no_backup:
+        backup_filename = _ssh_config.backup()
+        logger.info(f"Previous SSH config backed up to {backup_filename}")
+
+    # Finally save the rewritten confirm
+    config_filename = _ssh_config.save()
+    logger.info(f"Rewrote SSH config file at {config_filename}")
+
+    # We are done.

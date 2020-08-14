@@ -1,0 +1,27 @@
+# Google Compute Engine Section
+Host test_host_a
+    Hostname 1.1.1.1
+    StrictHostKeyChecking No
+    IdentityFile /stuff/_engine
+    UserKnownHostsFile=/stuff/_known_hosts
+    HostKeyAlias=compute.111111111111111111
+    IdentitiesOnly=yes
+    CheckHostIP=no
+Host test_host_b
+    Hostname 2.2.2.2
+    StrictHostKeyChecking No
+    IdentityFile /stuff/_engine
+    UserKnownHostsFile=/stuff/_known_hosts
+    HostKeyAlias=compute.222222222222222222
+    IdentitiesOnly=yes
+    CheckHostIP=no
+Host test_host_c
+    Hostname 3.3.3.3
+    StrictHostKeyChecking No
+    IdentityFile /stuff/_engine
+    UserKnownHostsFile=/stuff/_known_hosts
+    HostKeyAlias=compute.333333333333333333
+    IdentitiesOnly=yes
+    CheckHostIP=no    
+# End of Google Compute Engine Section
+
