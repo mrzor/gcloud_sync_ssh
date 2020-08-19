@@ -1,6 +1,6 @@
 click==7.1.2
 flake8==3.8.3
--e git+https://github.com/jeffkaufman/icdiff.git#egg=icdiff
+colored==1.4.2
 loguru==0.5.1
 ostruct==4.0.0
 pydantic==1.6.1

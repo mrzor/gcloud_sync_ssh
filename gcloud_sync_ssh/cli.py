@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from contextlib import contextmanager
+import sys
 
 import click
 from loguru import logger
@@ -117,6 +118,10 @@ def cli(instance_globs,
         no_inference, no_backup, no_host_defaults, no_removal, no_host_key_alias):
     """An improved version of `gcloud compute config-ssh`.
        See https://github.com/mrzor/gcloud_sync_ssh/blob/master/README.md for more info."""
+
+    # Change default log level
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
 
     if project and all_projects:
         logger.error("--project and --all-projects cannot be used simultaneously")

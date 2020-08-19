@@ -42,10 +42,7 @@ setup(
         'loguru>=0.5',
         'ostruct>=4.0',
         'pydantic>=1.6',
-        'icdiff'
-    ],
-    dependency_links=[
-        'https://github.com/jeffkaufman/icdiff.git#egg=icdiff'
+        'colored>=1.4.2'
     ],
     entry_points='''
         [console_scripts]

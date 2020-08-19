@@ -5,11 +5,11 @@ import os
 import re
 import shutil
 
-from icdiff import ConsoleDiff, set_cols_option
+# from icdiff import ConsoleDiff, set_cols_option
 from loguru import logger
-from ostruct import OpenStruct
+# from ostruct import OpenStruct
 
-
+from .util.color_diff import pretty_diff
 from .util.case_insensitive_dict import CaseInsensitiveDict
 from .host_config import HostConfig
 
@@ -203,22 +203,30 @@ conventions.
     # def remove_hosts(self, project_name, whitelist=[]):
     #    pass
 
+    # XXX: Restore this very superior version based on icdiff whenever they ship to PyPY
+    # def diff(self, **diff_args):
+    #     """See icdiff.ConsoleDiff.make_table args for diff_args"""
+    #     if not self.dirty:
+    #         return None
+
+    #     # Prepare differ based on icdiff magic
+    #     options = OpenStruct()
+    #     set_cols_option(options)  # This finds out terminal width in a platform independent way
+    #     cdiff = ConsoleDiff(cols=options.cols, line_numbers=True)
+
+    #     # Run it and return the good stuff
+    #     diff_args.setdefault("fromdesc", self._path)
+    #     diff_args.setdefault("todesc", "proposed")
+    #     diff_args.setdefault("context", True)
+    #     diff_args.setdefault("numlines", 1)
+    #     return cdiff.make_table(self._original_lines, self._lines, **diff_args)
+
     def diff(self, **diff_args):
-        """See icdiff.ConsoleDiff.make_table args for diff_args"""
         if not self.dirty:
             return None
-
-        # Prepare differ based on icdiff magic
-        options = OpenStruct()
-        set_cols_option(options)  # This finds out terminal width in a platform independent way
-        cdiff = ConsoleDiff(cols=options.cols, line_numbers=True)
-
-        # Run it and return the good stuff
-        diff_args.setdefault("fromdesc", self._path)
-        diff_args.setdefault("todesc", "proposed")
-        diff_args.setdefault("context", True)
-        diff_args.setdefault("numlines", 1)
-        return cdiff.make_table(self._original_lines, self._lines, **diff_args)
+        return pretty_diff(self._original_lines, self._lines,
+                           fromdesc=self._path, todesc="proposed changes",
+                           context_lines=2)
 
     def backup(self, tag=None, filename=None):
         tag = tag if tag else datetime.now().strftime("%Y%m%d_%H%M%S")
