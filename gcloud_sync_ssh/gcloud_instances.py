@@ -42,8 +42,6 @@ def _instance_ip(instance_data):
     return ip
 
 
-# XXX I'm interested in other statuses as well to possibly differenciate between
-#     deleted and stopped instances
 def _fetch_instances_data(project_id):
     list_args = ["gcloud", "--quiet", "compute", "instances", "list"]
     if project_id:
@@ -70,11 +68,9 @@ def build_host_dict(project_id, instance_globs):
         if not matches_any(instance_data['name'], instance_globs):
             continue
 
-        ip = _instance_ip(instance_data)
-        if ip:
-            minidata = {'ip': ip,
-                        'id': instance_data['id'],
-                        'status': instance_data['status']}
-            result[_instance_hostname(project_id, instance_data)] = minidata
+        minidata = {'ip': _instance_ip(instance_data),
+                    'id': instance_data['id'],
+                    'status': instance_data['status']}
+        result[_instance_hostname(project_id, instance_data)] = minidata
 
     return result

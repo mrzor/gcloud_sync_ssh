@@ -22,6 +22,13 @@ def nullcontext():
 
 def _sync_instances(project_id, instance_globs, ssh_config, host_template, no_removal):
     data = build_host_dict(project_id, instance_globs)
+
+    host_statuses = [datum['status'] for datum in data.values()]
+    status_recap_dict = {status: host_statuses.count(status) for status in set(host_statuses)}
+    status_recap_list = [f"{c} {s}" for s, c in status_recap_dict.items()]
+    status_recap = ", ".join(status_recap_list)
+    logger.info(f"[{project_id}] Instance status: {status_recap}")
+
     for host, hd in data.items():
         # See https://cloud.google.com/compute/docs/instances/instance-life-cycle
         # for status state machine
@@ -121,7 +128,10 @@ def cli(instance_globs,
 
     # Change default log level
     logger.remove()
-    logger.add(sys.stderr, level="INFO")
+    log_format = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | ' \
+        '<level>{level: <8}</level> | ' \
+        '<level>{message}</level>'
+    logger.add(sys.stderr, format=log_format, level="INFO")
 
     if project and all_projects:
         logger.error("--project and --all-projects cannot be used simultaneously")
@@ -167,7 +177,7 @@ def cli(instance_globs,
     logger.info(f"Beginning instance enumeration in {len(project_list)} projects")
     with ctx:  # Restoring our gcloud auth when we're done
         for project in project_list:
-            logger.info(f"Enumerating instances in project {project}")
+            logger.info(f"[{project}] Enumerating instances")
             _sync_instances(project, instance_globs, _ssh_config, host_template, no_removal)
 
     # Check what's new
