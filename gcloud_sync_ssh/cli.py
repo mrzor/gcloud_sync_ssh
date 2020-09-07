@@ -6,6 +6,7 @@ import sys
 import click
 from loguru import logger
 
+from . import __version__
 from .gcloud_auth import GCloudServiceAccountAuth, GCloudAccountIdAuth
 from .gcloud_config import gcloud_config_get
 from .gcloud_instances import build_host_dict
@@ -86,6 +87,8 @@ def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[])
 
 @click.command()
 @click.argument("INSTANCE_GLOBS", nargs=-1, type=str, required=False)
+@click.option("-V", "--version", is_flag=True, default=False,
+              help="Show version and leave")
 @click.option("-l", "--login", type=str,
               help="Perform gcloud auth to a specific account before running")
 @click.option("-s", "--service-account", type=str, metavar="AUTH_PATH",
@@ -93,7 +96,7 @@ def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[])
 @click.option("-P", "--all-projects", is_flag=True,
               help="Synchronize instances in all reachable projects")
 @click.option("-p", "--project", type=str, multiple=True, metavar="PROJECT_NAME",
-              help="Synchronize instances in a specific project")
+              help="Synchronize instances in a specific project (can be specified several times)")
 @click.option("-c", "--ssh-config", type=str,
               help="Path the SSH config file", metavar="CONFIG_PATH",
               default="~/.ssh/config")
@@ -115,16 +118,23 @@ Ex: "-kw StrictHostKeyChecking=" to remove the field
               help="(for new hosts) Don't use baked in kwargs defaults")
 @click.option("-nr", "--no-removal", is_flag=True, default=False,
               help="(for existing, stopped hosts) Don't remove STOPPED instances from config.")
+@click.option("-dt", "--debug-template", is_flag=True, default=False,
+              help="Display 'Host' template and exit")
 @click.option("--no-backup", is_flag=True, default=False,
               help="Don't save SSH configuration backup.")
 def cli(instance_globs,
         login, service_account,
         all_projects, project,
         ssh_config, kwarg,
-        not_interactive,
+        version, debug_template, not_interactive,
         no_inference, no_backup, no_host_defaults, no_removal, no_host_key_alias):
     """An improved version of `gcloud compute config-ssh`.
        See https://github.com/mrzor/gcloud_sync_ssh/blob/master/README.md for more info."""
+
+    # Version
+    if version:
+        logger.info(f"gcloud_sync_ssh {__version__}")
+        return
 
     # Change default log level
     logger.remove()
@@ -144,11 +154,18 @@ def cli(instance_globs,
         logger.error(f"SSH Config parse error: #{e.message}")
         exit(1)
 
+    # Prepare Host template
     inferred_kwargs = _ssh_config.infer_host_config().minidict() if not no_inference else {}
     host_template = _build_host_template(inferred_kwargs=inferred_kwargs,
                                          no_host_defaults=no_host_defaults,
                                          cli_kwargs=kwarg)
+    if debug_template:
+        logger.info("Displaying host template")
+        print(''.join(host_template.lines()))
+        logger.info("Done displaying host template")
+        return
 
+    # Prepare gcloud auth context
     ctx = _prepare_auth_context(login=login, service_account=service_account)
 
     # Try to obtain active project name if no projects are specified in options
