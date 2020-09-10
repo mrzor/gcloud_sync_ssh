@@ -164,8 +164,7 @@ conventions.
             self._append_host(hostname, ip, id, template)
 
     def _host_lines(self, hostname):
-        if hostname not in self._hosts:
-            return []
+        assert hostname in self._hosts
         r = [self._hosts[hostname]['line']]
         r += [pd['line'] for pd in self._hosts[hostname]["params"].values()]
         return sorted(r, reverse=True)

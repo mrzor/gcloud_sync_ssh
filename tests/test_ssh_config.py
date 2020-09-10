@@ -200,16 +200,23 @@ def test_remove_host_that_isnt_there():
 
 def test_remove_host():
     conf = SSHConfig(_test_file_path("exhibit_3"))
+
+    # Assert idempotent on removing non-configured host
+    conf.remove_host("this_host_does_not_exist")
+    assert not conf.dirty
+
+    # Assert actual removal
     offset = conf.remove_host("test_host_b")
     assert offset > 0
     assert conf.dirty
 
-    # Assert internal structures
+    # Assert internal structures are correct after actual removal
     assert 'test_host_a' in conf._hosts
     assert 'test_host_b' not in conf._hosts
     assert 'test_host_c' in conf._hosts
 
-    # Remove remaining two hosts and expect just the block in _lines
+    # Remove remaining two hosts and assert we're left with only marker comments
+    # in conf._lines
     conf.remove_host("test_host_a")
     conf.remove_host("test_host_c")
     assert conf._lines == [f'{_BEGIN_MARKER}\n', f"{_END_MARKER}\n", "\n"]
