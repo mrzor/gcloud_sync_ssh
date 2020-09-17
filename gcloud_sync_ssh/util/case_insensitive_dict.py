@@ -6,7 +6,7 @@ class CaseInsensitiveDict(dict):
        Very inspired by https://stackoverflow.com/questions/2082152/case-insensitive-dictionary.
 """
 
-    # Wishful doc:
+    # Doc that I'd wish I could state:
     # Because this dict is based on a dict of keys, it opts to intern keys derived from
     # interned strings. I.e. if you pass an interned key, the derived key will be interned
     # as well. You can turn off this behavior by setting _interning=False.

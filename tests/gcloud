@@ -1,0 +1,160 @@
+#!/usr/bin/env python
+# -*- python -*-
+
+# Fake/stub gcloud command
+#
+# In order to test my integration with gcloud, and because I shell out to gcloud
+# for all GCP-related features (as opposed to using an API client), it is simple
+# and convenient to just add this gcloud to $PATH for testing.
+#
+# Only the subcommands I'm interested in are implemented, and for those, only the
+# options/arguments I'm interested in are implemented, in the hackiest/simplest way
+# possible.
+#
+# Set the GCLOUD_STUB_DB environment variable to a valid, SqliteDict-managed Sqlite
+# database.
+#
+# `log` table: keys are integer indexes, values are full gcloud invocations
+# `config` table
+# `instances` tables
+# `projects` tables
+
+from datetime import datetime
+import json
+import os
+import sys
+
+import click
+from loguru import logger
+
+from json_dict import JsonDict
+
+DB_PATH = None
+
+
+@click.group()
+@click.pass_context
+@click.option("--quiet", is_flag=True, default=False)
+@click.option("--project", type=str)
+def main(ctx, quiet, project):
+    # Record command and arguments in "cmd_log" DB
+    timestamp = datetime.now().timestamp()
+    cmd_string = " ".join([os.path.basename(p) for p in sys.argv])
+    with db('cmd_log') as d:
+        d[timestamp] = cmd_string
+
+
+@main.command()
+def manhole():
+    import pdb
+    pdb.set_trace()
+
+
+@main.group()
+def compute():
+    pass
+
+
+@compute.group(name="instances")
+def compute_instances():
+    pass
+
+
+@compute_instances.command()
+@click.pass_context
+@click.option("--format", type=str)
+def list(ctx, format):
+    assert format == "json"
+
+    project = ctx.find_root().params["project"]
+    assert project is not None
+
+    if project == "crashme":
+        raise RuntimeError("crashyou")
+
+    with db("instances", raw=True) as d:
+        data = json.load(d)
+        # Rough selection (some corner cases will fault this -
+        # don't use zone names as project names in stub files and it should be fine)
+        selected_instances = [i for i in data if project in i["zone"]]
+
+    print(json.dumps(selected_instances))
+
+
+@main.group()
+def projects():
+    pass
+
+
+@projects.command(name="list")
+@click.option("--format", type=str)
+def projects_list(format):
+    assert format == "json"
+    with db("projects", raw=True) as d:
+        print(d.read())
+
+
+@main.group()
+def config():
+    pass
+
+
+@config.command()
+@click.option("--format", type=str)
+@click.argument("key", required=True, type=str)
+def get_value(key, format):
+    assert format == "json"
+    key = key.replace("core/", "")
+    print(json.dumps(config_get(key, None)))
+
+
+@config.command()
+@click.argument("property", type=str, required=True)
+@click.argument("value", type=str, required=True)
+def set(property, value):
+    property = property.replace("core/", "")
+    config_set(property, value)
+
+
+@main.group()
+def auth():
+    pass
+
+
+@auth.command()
+@click.argument("account", type=str, required=True)
+def login(account):
+    config_set("account", account)
+
+
+@auth.command()
+@click.option("--key-file", type=str, required=True)
+def activate_service_account(key_file):
+    with open(key_file, "r") as f:
+        data = json.load(f)
+        config_set("account", data["client_email"])
+
+
+def db(tablename, raw=False):
+    path = f"{DB_PATH}.{tablename}.json"
+    result = open(path, "r") if raw else JsonDict(__path__=path)
+    logger.trace(f"Opening {tablename} as a {type(result)}")
+    return result
+
+
+def config_set(field, value):
+    with db("config") as d:
+        d[field] = value
+
+
+def config_get(field, default=None):
+    with db("config") as d:
+        return d.get(field, default)
+
+
+if __name__ == "__main__":
+    DB_PATH = os.getenv("GCLOUD_DB_PATH", "/tmp/gcloud_stub")
+    __name__ = "<stubbed-gcloud>"
+    logger.trace(f"DB_PATH={DB_PATH}")
+
+    main()

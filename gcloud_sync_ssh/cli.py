@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 import sys
 
 import click
 from loguru import logger
+from pydantic import ValidationError
 
 from . import __version__
 from .gcloud_auth import GCloudServiceAccountAuth, GCloudAccountIdAuth
@@ -26,7 +27,8 @@ def _sync_instances(project_id, instance_globs, ssh_config, host_template, no_re
 
     host_statuses = [datum['status'] for datum in data.values()]
     status_recap_dict = {status: host_statuses.count(status) for status in set(host_statuses)}
-    status_recap_list = [f"{c} {s}" for s, c in status_recap_dict.items()]
+    status_recap_list = [f"{status_recap_dict[status]} {status}"
+                         for status in sorted(status_recap_dict)]
     status_recap = ", ".join(status_recap_list)
     logger.info(f"[{project_id}] Instance status: {status_recap}")
 
@@ -36,7 +38,11 @@ def _sync_instances(project_id, instance_globs, ssh_config, host_template, no_re
 
         # We ignore transitional states and suspension-related cases
         if hd['status'] == 'RUNNING':
-            ssh_config.update_host(host, ip=hd['ip'], id=hd['id'], template=host_template)
+            if hd['ip']:
+                ssh_config.update_host(host, ip=hd['ip'], id=hd['id'], template=host_template)
+            else:
+                # XXX there is an argument to be made for removing the instance here
+                pass
 
         if hd['status'] == 'TERMINATED':
             if not no_removal:
@@ -55,6 +61,16 @@ def _prepare_auth_context(login=None, service_account=None):
     return ctx
 
 
+def _pp_validation_errors(ex):
+    for err in ex.errors():
+        t = err["type"]
+        field = err["loc"][0]
+        if t == "value_error.extra":
+            logger.error(f"field {field} is not supported")
+        else:
+            logger.error(f"{t} in field {field} : {err['msg']}")
+
+
 def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[]):
     """Prepares our template HostConfig for hosts we are going to discover"""
     # XXX: hosts we need to update don't use the template at all, but could, to batch edit)
@@ -71,9 +87,10 @@ def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[])
     # 3) Finally override with kwargs from the commandline
     # XXX doesn't support lists yet
     for kwarg in cli_kwargs:
-        eq_idx = kwarg.index("=")
-        if eq_idx == -1:
-            logger.error(f"Invalid KWArg '#{kwarg}' - must be Keyword=Argument")
+        try:
+            eq_idx = kwarg.index("=")
+        except ValueError:
+            logger.error(f"Invalid KWArg '{kwarg}' - must be Keyword=Argument")
             exit(1)
         k = kwarg[:eq_idx]
         v = kwarg[eq_idx+1:]
@@ -82,7 +99,11 @@ def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[])
         else:
             kwargs.pop(k, None)
 
-    return HostConfig(**kwargs)
+    try:
+        return HostConfig(**kwargs)
+    except ValidationError as e:
+        _pp_validation_errors(e)
+        exit(1)
 
 
 @click.command()
@@ -136,12 +157,15 @@ def cli(instance_globs,
         logger.info(f"gcloud_sync_ssh {__version__}")
         return
 
-    # Change default log level
-    logger.remove()
+    # Remove pre-configured logger
+    with suppress(ValueError):
+        logger.remove(0)
+
+    # Configure logger
     log_format = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | ' \
         '<level>{level: <8}</level> | ' \
-        '<level>{message}</level>'
-    logger.add(sys.stderr, format=log_format, level="INFO")
+        '<level>{message}</level>'  # Simpler format, but still pretty
+    logger.add(sys.stderr, format=log_format, level="INFO")  # Change default log level
 
     if project and all_projects:
         logger.error("--project and --all-projects cannot be used simultaneously")
@@ -151,7 +175,7 @@ def cli(instance_globs,
     try:
         _ssh_config = SSHConfig(ssh_config)
     except SSHConfigParseError as e:
-        logger.error(f"SSH Config parse error: #{e.message}")
+        logger.error(f"SSH Config parse error: {e}")
         exit(1)
 
     # Prepare Host template
@@ -171,7 +195,7 @@ def cli(instance_globs,
     # Try to obtain active project name if no projects are specified in options
     if not all_projects and not project:
         project = [gcloud_config_get("core/project")]
-        if not project:
+        if not project[0]:
             logger.error("could not determine an active project")
             exit(1)
 
@@ -180,8 +204,8 @@ def cli(instance_globs,
     if not all_projects and not has_pattern(project):
         # One or more simple --project options were passed, use "as is"
         project_list = project
-
-    if all_projects or has_pattern(project):
+    else:
+        assert all_projects or has_pattern(project)  # ? obviously
         # Either we want all projects, or we have some patterns to match against all projects
         logger.info("Enumerating reachable GCP projects")
         if has_pattern(project):

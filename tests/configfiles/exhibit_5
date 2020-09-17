@@ -1,0 +1,10 @@
+# Google Compute Engine Section
+
+Host stubbed_instance_1.us-central1-b.stub-project-1
+    HostName 127.127.127.3
+    IdentityFile /home/zor/.ssh/google_compute_engine
+    UserKnownHostsFile /home/zor/.ssh/google_compute_known_hosts
+    HostKeyAlias compute.0000000000000000002
+    IdentitiesOnly yes
+    CheckHostIP no
+# End of Google Compute Engine Section

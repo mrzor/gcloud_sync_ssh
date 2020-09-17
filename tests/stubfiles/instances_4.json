@@ -1,0 +1,28 @@
+[
+    {
+        "creationTimestamp": "2020-05-25T07:40:46.359-07:00",
+        "id": "0000000000000000001",
+        "machineType": "https://www.googleapis.com/compute/v1/projects/stub-project-1/zones/us-central1-b/machineTypes/custom-12-61440",
+        "name": "stubbed_instance_5",
+        "networkInterfaces": [
+            {
+                "accessConfigs": [
+                    {
+                        "kind": "compute#accessConfig",
+                        "name": "external-nat",
+                        "networkTier": "PREMIUM",
+                        "type": "ONE_TO_ONE_NAT"
+                    }
+                ],
+                "kind": "compute#networkInterface",
+                "name": "nic0",
+                "network": "https://www.googleapis.com/compute/v1/projects/stub-project-1/global/networks/default",
+                "networkIP": "127.127.127.1",
+                "subnetwork": "https://www.googleapis.com/compute/v1/projects/stub-project-1/regions/us-central1/subnetworks/default"
+            }
+        ],
+        "selfLink": "https://www.googleapis.com/compute/v1/projects/stub-project-1/zones/us-central1-b/instances/stubbed_instance_5",
+        "status": "RUNNING",
+        "zone": "https://www.googleapis.com/compute/v1/projects/stub-project-1/zones/us-central1-b"
+    }
+]

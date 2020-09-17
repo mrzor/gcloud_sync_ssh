@@ -14,10 +14,11 @@ This tools has some benefits:
 * Generates smallest possible diff by preserving casing, separators and whitespace
   * Smallest diff = highest review impact.
 
-
 And some drawbacks:
 
 * If the instance is not configured to let you in, this tool will _not_ fix that.
+
+I've used it for a couple of months for my modest needs and it did the job flawlessly. YMMV - see 'Limitations' below.
 
 ## Install
 
@@ -33,7 +34,6 @@ And some drawbacks:
 - `pip install -r requirements.txt`
   - N.B. This will install development dependencies as well
 - `python -m gcloud_sync_ssh`
-
 
 ## Usage
 
@@ -119,33 +119,37 @@ If you want to use it from `cron` or CI, this behavior might be counterproductiv
 
 ## Limitations
 
+* Doesn't remove _deleted_ instances, just _stopped_ ones. (TODO: Support removing deleted instances as well)
 * SSH kwarg assignments that accept multiple values, like `DynamicForward` or `SendEnv`, are not supported. (TODO: accept multiple `-kw` opts and set them correctly)
 * Only works with one account at a time (TODO: Support iterating through all accounts exposed by `gcloud auth list`)
 * Can only be setup through commandline options (TODO: Support configuration file on top of gazillion command line options)
+* Doesn't support "jump box" setups or VPN setups - where you connect to the private IP address of your instances. (TODO: Support that!)
 * Is single-threaded synchronous (TODO: Support parallelism with either threads or async)
 * Formatting of new hosts is not _exactly_ the same as what `gcloud compute config-ssh` does. Notably, it has consistent space delimiting instead of having `=` on some lines and ` ` on others. (Probably won't fix)
-* Doesn't remove _deleted_ instances, just _stopped_ ones. (TODO: Support removing deleted instances as well)
+* SSH kwarg assignments must be given in exact case, like `DynamicForward`. `dynamicforward` will not work. (TODO: accept any casing for keywords in kwargs assignments)
 * There are no ways to setup 'specific' options other than the two builtins for new `Host`. (TODO: Accept Python plugins to allow arbitrarily complex schemes to add/edit SSH config per host)
+
+The above are roughly sorted given how concerning they are to me. None are preventing me to achieve my goals with the tool - but some may hinder you.
 
 ### Alternatives
 
 Using this script to setup connectivity should work well enough for ~hundreds of instances whose external IPs change ~daily. I use it for ~dozens of instances whose IPs change ~daily.
 
-If your external IPs change very frequently, or if you have thousands of instance, this tool can still be a useful crutch, but you may want to look into alternatives.
+If your external IPs change very frequently, or if you have thousands of instances, this tool can still be a useful crutch, but you may want to look into alternatives.
 
 Here are my thoughts on the subject, ordered by effort required.
 
 * Setup a shared private subnetwork between your instances, and you'll get DNS with `.internal` TLD for free. A jumpbox is a way to get access to your instances. [ XXX Other ways ? ]
 * Use some form of service registration/discovery. Hashicorp Consul comes to mind.
-* Use Google Logging to process instance startup/showdown logs. Tap those into Pub/Sub. Write a lambda function that produces a `hosts` file or a SSH config file. Store that in Storage at a well known URI. Download it every minute on all your machines.
+* Use Google Logging to process instance startup/showdown logs. Tap those into Pub/Sub. Write a lambda function that produces a `hosts` file or a SSH config file. Store that in Storage at a well known URI. Download that in whichever way you like, then `Include` it in your SSH config.
 * Same as above, but generate a zone file and feed that to a DNS server you control.
-* Move all your things to K8s and welcome your new YAML overlords.
+* Move all your things to K8s and welcome your new YAML overlords. You can't ssh into anything without using `kubectl` but that's okay.
 
 ## Contributing
 
 Grab a TODO from the _Limitations_ list, an issue or bring your own issue to solve.
 
-If it makes sense, add tests and make sure they pass with `python -m pytest`.
+If it makes sense, please add tests and make sure they pass with `python -m pytest`.
 
 ## License
 
