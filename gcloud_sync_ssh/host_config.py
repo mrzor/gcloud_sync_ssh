@@ -268,6 +268,8 @@ Not all enums are properly typed.
         def _format_kv(k, v):
             if isinstance(v, bool):
                 v = "yes" if v else "no"
+            elif isinstance(v, list):
+                return [_format_kv(k, inner_v) for inner_v in v]
             v = f'"{v}"' if (force_quotes or " " in v) else v
             return f"{indent}{k}{separator}{v}\n"
 
@@ -285,4 +287,12 @@ Not all enums are properly typed.
         sorted_params = sorted(params.items(), key=lambda e: e[0])
         lines += [_format_kv(p[0], p[1]) for p in sorted_params]
 
-        return lines
+        # Flatten the lines array
+        flat_lines = []
+        for line in lines:
+            if isinstance(line, list):
+                flat_lines += line
+            else:
+                flat_lines.append(line)
+
+        return flat_lines

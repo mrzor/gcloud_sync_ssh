@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager, suppress
 import sys
+import typing
 
 import click
 from loguru import logger
@@ -13,6 +14,7 @@ from .gcloud_config import gcloud_config_get
 from .gcloud_instances import build_host_dict
 from .gcloud_projects import fetch_projects_data
 from .host_config import HostConfig
+from .util.case_insensitive_dict import CaseInsensitiveDict
 from .util.globbing import has_pattern, matches_any
 from .ssh_config import SSHConfig, SSHConfigParseError
 
@@ -84,6 +86,12 @@ def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[])
     """Prepares our template HostConfig for hosts we are going to discover"""
     # XXX: hosts we need to update don't use the template at all, but could, to batch edit)
 
+    # Prepare keyword->field case insensitive lookup dict
+    dummy_config = HostConfig()
+    keywords = CaseInsensitiveDict()
+    for field_name, field_metadata in dummy_config.__fields__.items():
+        keywords[field_name] = field_metadata
+
     # 1) Start with defaults
     if no_host_defaults:
         kwargs = {}
@@ -101,11 +109,22 @@ def _build_host_template(inferred_kwargs={}, no_host_defaults=[], cli_kwargs=[])
         except ValueError:
             logger.error(f"Invalid KWArg '{kwarg}' - must be Keyword=Argument")
             exit(1)
-        k = kwarg[:eq_idx]
+        k = keywords._k(kwarg[:eq_idx])  # Use canonical casing of keyword
         v = kwarg[eq_idx+1:]
-        if v:
-            kwargs[k] = v
-        else:
+        if v:  # We are setting a value
+            # Deal with keywords that can be specified multiple times
+            # NB: typing.get_origin is 3.8+ - we are 3.6+, so we must explicitely
+            #     check for all multivalued types available. Fortunately, it's just List[str]
+            #     (for now).
+            if k in keywords and keywords[k].outer_type_ is typing.List[str]:
+                if k not in kwargs:
+                    kwargs[k] = [v]  # We don't have any, set it up as a list
+                else:
+                    kwargs[k].append(v)  # We have (we hope) a list, append to it
+            else:
+                # Simple case (last input on CLI wins)
+                kwargs[k] = v
+        else:  # We are unsetting a value
             kwargs.pop(k, None)
 
     try:

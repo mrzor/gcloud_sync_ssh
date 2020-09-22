@@ -70,4 +70,6 @@ def test_quoting():
     assert hc.lines(force_quotes=True) == ['    User "narcissus maximus"\n']
 
 
-# XXX test lists of things
+def test_multiple_values():
+    hc = HostConfig(LocalForward=['lf1', 'lf2', 'lf3'], User="narcissus")
+    assert len(hc.lines()) == 4

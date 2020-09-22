@@ -41,6 +41,16 @@ I've used it for a couple of months for my modest needs and it did the job flawl
 
 The tool works in four phases. It optionally changes the gcloud authentication context, then it enumerates projects and instances, then it updates your SSH config in memory and finally saves it after making a backup and showing you the diff.
 
+#### Preliminary: Choose which config file to edit
+
+By default, `gcloud_sync_ssh` edits the standard `~/.ssh/config`. This will be fine for most uses. It may be changed with `-c/--config`.
+
+Some people prefer the tool to operate on an isolated file, like `~/.ssh/config.auto`. A few things to keep in mind if you go down that path:
+
+- You need to `chmod 0600 ~/.ssh/config.auto` for SSH to read it
+- You need to add `Include ~/.ssh/config.auto` to your existing `~/.ssh/config` _before_ any `Match` or `Host` block.
+- Alternatively, use `ssh -F ~/.ssh/config.auto` instead of setting up the `Include`.
+
 #### First phase: Authentication
 
 First it will optionally change your `gcloud` authentication context as desired, using the
@@ -122,13 +132,11 @@ If you want to use it from `cron` or CI, this behavior might be counterproductiv
 
 ## Limitations
 
-* SSH kwarg assignments that accept multiple values, like `DynamicForward` or `SendEnv`, are not supported. (TODO: accept multiple `-kw` opts and set them correctly)
 * Only works with one account at a time (TODO: Support iterating through all accounts exposed by `gcloud auth list`)
 * Can only be setup through commandline options (TODO: Support configuration file on top of gazillion command line options)
 * Doesn't support "jump box" setups or VPN setups - where you connect to the private IP address of your instances. (TODO: Support that!)
 * Is single-threaded synchronous (TODO: Support parallelism with either threads or async)
 * Formatting of new hosts is not _exactly_ the same as what `gcloud compute config-ssh` does. Notably, it has consistent space delimiting instead of having `=` on some lines and ` ` on others. (Probably won't fix)
-* SSH kwarg assignments must be given in exact case, like `DynamicForward`. `dynamicforward` will not work. (TODO: accept any casing for keywords in kwargs assignments)
 * There are no ways to setup 'specific' options other than the two builtins for new `Host`. (TODO: Accept Python plugins to allow arbitrarily complex schemes to add/edit SSH config per host)
 * Vanishing/deleted instances can only be removed from your config if their hostname is suffixed by `.<project-name>`. This is the GCP default. I found no other way to attribute a Host in your SSH config to a given SSH project. Workaround: remove everything with `gcloud compute config-ssh --remove` then use `gcloud_sync_ssh` as usual. (TODO: Support `--overwrite` flag that removes everything in the config block before running)
 * Instances in transitional states and suspended states are completely ignored by the tool.

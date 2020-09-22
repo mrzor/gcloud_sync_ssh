@@ -83,7 +83,7 @@ def test_debug_template_1(caplog, stubbed_gcloud_ctx):
 
 def test_debug_template_2(caplog, stubbed_gcloud_ctx):
     # This covers basic, empty host template
-    config_path = prep_simple_ctx(stubbed_gcloud_ctx, sshconfig="exhibit_3")
+    config_path = prep_simple_ctx(stubbed_gcloud_ctx)
     result = CliRunner().invoke(cli, ["--ssh-config", config_path,
                                       "--debug-template", "--no-host-defaults", "--no-inference"])
     assert result.exit_code == 0
@@ -93,7 +93,7 @@ def test_debug_template_2(caplog, stubbed_gcloud_ctx):
 
 def test_debug_template_3(caplog, stubbed_gcloud_ctx):
     # This covers kwarg assignment
-    config_path = prep_simple_ctx(stubbed_gcloud_ctx, sshconfig="exhibit_3")
+    config_path = prep_simple_ctx(stubbed_gcloud_ctx)
     result = CliRunner().invoke(cli, ["--ssh-config", config_path,
                                       "--debug-template", "--no-host-defaults", "--no-inference",
                                       "-kw", "IdentityAgent=None",
@@ -107,7 +107,7 @@ def test_debug_template_3(caplog, stubbed_gcloud_ctx):
 
 def test_debug_template_4(caplog, stubbed_gcloud_ctx):
     # This covers removing a builtin kwarg assignment
-    config_path = prep_simple_ctx(stubbed_gcloud_ctx, sshconfig="exhibit_3")
+    config_path = prep_simple_ctx(stubbed_gcloud_ctx)
     result = CliRunner().invoke(cli, ["--ssh-config", config_path, "--debug-template",
                                       "--no-inference",
                                       "-kw", "CheckHostIP="])
@@ -115,6 +115,34 @@ def test_debug_template_4(caplog, stubbed_gcloud_ctx):
     template_lines = [line for line in result.stdout.split("\n") if line and "| INFO" not in line]
     assert len(template_lines) == 3
     assert len([line for line in template_lines if "CheckHostIP" in line]) == 0
+
+
+def test_debug_template_5(caplog, stubbed_gcloud_ctx):
+    # This covers using the same kwarg multiple times when SSH allows multiple values
+    config_path = prep_simple_ctx(stubbed_gcloud_ctx)
+    result = CliRunner().invoke(cli, ["--ssh-config", config_path, "--debug-template",
+                                      "--no-inference", "no--host-defaults",
+                                      "-kw", "DynamicForward=df1",
+                                      "-kw", "DynamicForward=df2",
+                                      "-kw", "LocalForward=lf1",
+                                      "-kw", "DynamicForward=df3"])
+    assert result.exit_code == 0
+    template_lines = [line for line in result.stdout.split("\n") if line and "| INFO" not in line]
+    assert len(template_lines) == 8
+    assert len([line for line in template_lines if "DynamicForward" in line]) == 3
+    assert len([line for line in template_lines if "LocalForward" in line]) == 1
+
+
+def test_debug_template_6(caplog, stubbed_gcloud_ctx):
+    # This covers using a case insensitive kwarg
+    config_path = prep_simple_ctx(stubbed_gcloud_ctx)
+    result = CliRunner().invoke(cli, ["--ssh-config", config_path, "--debug-template",
+                                      "--no-inference",
+                                      "-kw", "checkHostIp=yes"])
+    assert result.exit_code == 0
+    template_lines = [line for line in result.stdout.split("\n") if line and "| INFO" not in line]
+    assert len(template_lines) == 4
+    assert len([line for line in template_lines if "CheckHostIP" in line]) == 1
 
 
 ###############################################################################
