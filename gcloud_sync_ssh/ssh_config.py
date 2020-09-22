@@ -24,6 +24,7 @@ _RE_COMMENT = re.compile("^ *#")
 _RE_EMPTY = re.compile(r"^[ \t]*$")
 _RE_HOST = re.compile(r'^ *Host (.+)$')
 _RE_KV = re.compile(r'^(?P<WS> *)(?P<K>[^ =]+)[ =] *(?P<V>.+)$')  # V may be quoted
+_RE_PROJECT = re.compile(r'\.([^.]+)$')
 
 _GCLOUD_KW_ORDERING = ['HostName', 'IdentityFile', 'UserKnownHostsFile', 'HostKeyAlias',
                        'IdentitiesOnly', 'CheckHostIP']
@@ -168,6 +169,13 @@ conventions.
         r = [self._hosts[hostname]['line']]
         r += [pd['line'] for pd in self._hosts[hostname]["params"].values()]
         return sorted(r, reverse=True)
+
+    def hosts_of_project(self, project_name):
+        """Returns host entries in this config filtered by GCP project name"""
+        def matches_project(hostname):
+            match = _RE_PROJECT.search(hostname)
+            return project_name == match[1] if match else False
+        return {k: v for k, v in self._hosts.items() if matches_project(k)}
 
     def remove_host(self, hostname):
         if hostname not in self._hosts:

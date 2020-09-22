@@ -223,3 +223,14 @@ def test_remove_host():
 
 
 # XXX add a test and an exhibit to test behavior around comments inside the fenced block
+
+
+def test_hosts_of_project():
+    conf = SSHConfig(_test_file_path("exhibit_1"))
+    result = conf.hosts_of_project("project-name-1")
+    assert len(result) == 1
+    assert result['test-a.us-central1-b.project-name-1']
+
+    result = conf.hosts_of_project("project-name-2")
+    assert len(result) == 1
+    assert result['test-b.europe-west4-b.project-name-2']

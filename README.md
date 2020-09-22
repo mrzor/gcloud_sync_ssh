@@ -77,7 +77,10 @@ Your configuration will be updated in place and nothing else will change. There 
 
 ##### Deletions
 
-Then we have deletions. Instances in your configuration that have entered the `STOPPED` status will be removed from your configuration. You can disable this using the `--no-removal` flag.
+Then we have deletions:
+
+- Instances in your configuration that have entered the `STOPPED` status will be removed from your configuration. You can disable this using the `-nrs|--no-remove-stopped` flag.
+- Deleted instances (or instances that have otherwise vanished) will be removed from your SSH config _if and only if_ it's possible to attribute the instance to a project using its hostname i.e. its hostname terminates by `.<project-name>`. You can disable that using the `-nrv|--no-remove-vanished` flag.
 
 ##### Additions
 
@@ -119,7 +122,6 @@ If you want to use it from `cron` or CI, this behavior might be counterproductiv
 
 ## Limitations
 
-* Doesn't remove _deleted_ instances, just _stopped_ ones. (TODO: Support removing deleted instances as well)
 * SSH kwarg assignments that accept multiple values, like `DynamicForward` or `SendEnv`, are not supported. (TODO: accept multiple `-kw` opts and set them correctly)
 * Only works with one account at a time (TODO: Support iterating through all accounts exposed by `gcloud auth list`)
 * Can only be setup through commandline options (TODO: Support configuration file on top of gazillion command line options)
@@ -128,6 +130,8 @@ If you want to use it from `cron` or CI, this behavior might be counterproductiv
 * Formatting of new hosts is not _exactly_ the same as what `gcloud compute config-ssh` does. Notably, it has consistent space delimiting instead of having `=` on some lines and ` ` on others. (Probably won't fix)
 * SSH kwarg assignments must be given in exact case, like `DynamicForward`. `dynamicforward` will not work. (TODO: accept any casing for keywords in kwargs assignments)
 * There are no ways to setup 'specific' options other than the two builtins for new `Host`. (TODO: Accept Python plugins to allow arbitrarily complex schemes to add/edit SSH config per host)
+* Vanishing/deleted instances can only be removed from your config if their hostname is suffixed by `.<project-name>`. This is the GCP default. I found no other way to attribute a Host in your SSH config to a given SSH project. Workaround: remove everything with `gcloud compute config-ssh --remove` then use `gcloud_sync_ssh` as usual. (TODO: Support `--overwrite` flag that removes everything in the config block before running)
+* Instances in transitional states and suspended states are completely ignored by the tool.
 
 The above are roughly sorted given how concerning they are to me. None are preventing me to achieve my goals with the tool - but some may hinder you.
 

@@ -314,11 +314,11 @@ def test_removal_run_1(caplog, stubbed_gcloud_ctx):
 
 def test_removal_run_2(caplog, stubbed_gcloud_ctx):
     # Similar to removal_run_1, we swap 'status' instances 1 and 2
-    # But this time we cover the "--no-removal" flag
+    # But this time we cover the "--no-remove-stopped" flag
     config_path = prep_simple_ctx(stubbed_gcloud_ctx,
                                   instances="instances_3", sshconfig="exhibit_5")
     result = CliRunner().invoke(cli, ["--ssh-config", config_path, "--not-interactive",
-                                      "--project", "stub-project-1", "--no-removal"])
+                                      "--project", "stub-project-1", "--no-remove-stopped"])
     assert result.exit_code == 0
     with stubbed_gcloud_ctx.tmpfile("ssh_config", mode="rt") as f:
         conflines = f.readlines()
@@ -326,6 +326,32 @@ def test_removal_run_2(caplog, stubbed_gcloud_ctx):
         assert len([line for line in conflines if "127.127.127.3" in line]) == 1
         assert len([line for line in conflines if "127.127.127.127" in line]) == 1
         assert len([line for line in conflines if "stubbed_instance_2" in line]) == 0
+
+
+def test_removal_run_3(caplog, stubbed_gcloud_ctx):
+    # Similar to removal_run_1, but this time we setup the stubs to remove deleted instances
+    config_path = prep_simple_ctx(stubbed_gcloud_ctx,
+                                  instances="instances_0", sshconfig="exhibit_5")
+    result = CliRunner().invoke(cli, ["--ssh-config", config_path, "--not-interactive",
+                                      "--project", "stub-project-1"])
+    assert result.exit_code == 0
+    with stubbed_gcloud_ctx.tmpfile("ssh_config", mode="rt") as f:
+        conflines = f.readlines()
+        assert len(conflines) == 3  # i.e. we removed the instance
+
+
+def test_removal_run_4(caplog, stubbed_gcloud_ctx):
+    # Similar to removal_run_1, but this time we setup the stubs to remove deleted instances
+    # And with the flag to _not_ remove it
+    config_path = prep_simple_ctx(stubbed_gcloud_ctx,
+                                  instances="instances_0", sshconfig="exhibit_5")
+    result = CliRunner().invoke(cli, ["--ssh-config", config_path, "--not-interactive",
+                                      "--project", "stub-project-1",
+                                      "--no-remove-vanished"])
+    assert result.exit_code == 0
+    with stubbed_gcloud_ctx.tmpfile("ssh_config", mode="rt") as f:
+        conflines = f.readlines()
+        assert len([line for line in conflines if "stubbed_instance_1" in line]) == 1
 
 
 def test_noop_unreachable_1(stubbed_gcloud_ctx):

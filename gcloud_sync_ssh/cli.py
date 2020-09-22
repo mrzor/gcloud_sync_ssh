@@ -22,7 +22,8 @@ def nullcontext():
     yield
 
 
-def _sync_instances(project_id, instance_globs, ssh_config, host_template, no_removal):
+def _sync_instances(project_id, instance_globs, ssh_config, host_template,
+                    no_remove_stopped, no_remove_vanished):
     data = build_host_dict(project_id, instance_globs)
 
     host_statuses = [datum['status'] for datum in data.values()]
@@ -32,7 +33,9 @@ def _sync_instances(project_id, instance_globs, ssh_config, host_template, no_re
     status_recap = ", ".join(status_recap_list)
     logger.info(f"[{project_id}] Instance status: {status_recap}")
 
+    seen_hosts = set()
     for host, hd in data.items():
+        seen_hosts.add(host)
         # See https://cloud.google.com/compute/docs/instances/instance-life-cycle
         # for status state machine
 
@@ -45,8 +48,14 @@ def _sync_instances(project_id, instance_globs, ssh_config, host_template, no_re
                 pass
 
         if hd['status'] == 'TERMINATED':
-            if not no_removal:
+            if not no_remove_stopped:
                 ssh_config.remove_host(host)
+
+    # Remove vanished/deleted instances
+    if not no_remove_vanished:
+        config_hosts = ssh_config.hosts_of_project(project_id)
+        for host in (set(config_hosts.keys()) - seen_hosts):
+            ssh_config.remove_host(host)
 
 
 def _prepare_auth_context(login=None, service_account=None):
@@ -137,8 +146,11 @@ Ex: "-kw StrictHostKeyChecking=" to remove the field
               help="(for new hosts) Don't infer kwargs from existing Hosts")
 @click.option("-nd", "--no-host-defaults", is_flag=True, default=False,
               help="(for new hosts) Don't use baked in kwargs defaults")
-@click.option("-nr", "--no-removal", is_flag=True, default=False,
+@click.option("-nrs", "--no-remove-stopped", is_flag=True, default=False,
               help="(for existing, stopped hosts) Don't remove STOPPED instances from config.")
+@click.option("-nrv", "--no-remove-vanished", is_flag=True, default=False,
+              help="(for existing, unlistable hosts) Don't remove "
+              "vanished/deleted instances from config.")
 @click.option("-dt", "--debug-template", is_flag=True, default=False,
               help="Display 'Host' template and exit")
 @click.option("--no-backup", is_flag=True, default=False,
@@ -148,7 +160,8 @@ def cli(instance_globs,
         all_projects, project,
         ssh_config, kwarg,
         version, debug_template, not_interactive,
-        no_inference, no_backup, no_host_defaults, no_removal, no_host_key_alias):
+        no_inference, no_backup, no_host_defaults, no_host_key_alias,
+        no_remove_stopped, no_remove_vanished):
     """An improved version of `gcloud compute config-ssh`.
        See https://github.com/mrzor/gcloud_sync_ssh/blob/master/README.md for more info."""
 
@@ -219,7 +232,8 @@ def cli(instance_globs,
     with ctx:  # Restoring our gcloud auth when we're done
         for project in project_list:
             logger.info(f"[{project}] Enumerating instances")
-            _sync_instances(project, instance_globs, _ssh_config, host_template, no_removal)
+            _sync_instances(project, instance_globs, _ssh_config, host_template,
+                            no_remove_stopped, no_remove_vanished)
 
     # Check what's new
     diff = _ssh_config.diff()
